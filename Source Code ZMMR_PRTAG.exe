@@ -1,0 +1,893 @@
+*&---------------------------------------------------------------------*
+*& Report  ZMMR_PRTAG
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+REPORT  ZMMR_PRTAG.
+TYPE-POOLS: SLIS.
+TABLES : EBAN , ZPRTAG , ZREREJ ,ZMM_REL_STRATEGY , SSCRFIELDS.
+DATA: LAYOUT1 TYPE SLIS_LAYOUT_ALV,
+      FIELDCATALOG TYPE SLIS_T_FIELDCAT_ALV WITH HEADER LINE  ,
+      IT_EVENTS TYPE SLIS_T_EVENT WITH HEADER LINE,
+       X_SAVE.
+
+DATA: BUDAT1 TYPE DATUM .
+DATA: ITEMTEXT2 LIKE THEAD-TDNAME.
+DATA : BEGIN OF ITAB2 OCCURS 0,
+       TDFORMAT LIKE TLINE-TDFORMAT,
+       TDLINE   LIKE TLINE-TDLINE,
+       END OF ITAB2.
+
+DATA:ITEXTR TYPE TABLE OF TLINE WITH HEADER LINE.
+DATA:ITEXTR1 TYPE TABLE OF TLINE WITH HEADER LINE.
+DATA: ITAB3 LIKE STANDARD TABLE OF ITAB2 WITH HEADER LINE .
+TYPES : BEGIN OF TT_FINAL ,
+        BNFPO TYPE EBAN-BNFPO ,  "item Number of Purchase Requisition
+        BNFPO3 TYPE EBAN-BNFPO ,  "item Number of Purchase Requisition
+        BNFPO4 TYPE EBAN-BNFPO ,  "item Number of Purchase Requisition
+        BANFN3 TYPE EBAN-BANFN ,  "Purchase Requisition Number  for tagg fetch
+        BANFN4 TYPE EBAN-BANFN ,  "Purchase Requisition Number  for untagg fetch
+        CHANGENR TYPE EBAN-BANFN ,  "Purchase Requisition Number
+        BANFN2 TYPE EBAN-BANFN ,  "Purchase Requisition Number
+        BANFN1 TYPE EBAN-BANFN ,  "Purchase Requisition Number
+        BANFN TYPE EBAN-BANFN ,  "Purchase Requisition Number
+        TAGG TYPE ZPRTAG-TAGG ,  "Single-Character Indicator
+        TCOUNT TYPE I ,          "NO OF TAGG
+        UCOUNT TYPE  I ,         "NO OF UNTAGG
+        FRGDT TYPE EBAN-FRGDT ,   "Purchase Requisition Release Date
+        BUDAT TYPE ZPRTAG-BUDAT , "Posting Date in the Document
+        UBUDAT TYPE ZPRTAG-BUDAT , "Posting Date in the Document " FOR HIGHER DATE
+        TBUDAT TYPE ZPRTAG-BUDAT , "Posting Date in the Document "FOR LOWER DATE
+        UDATE  TYPE DATUM ,
+        UDATE1  TYPE DATUM ,
+        FGDAT  TYPE DATUM ,
+        BADAT TYPE EBAN-BADAT ,  "Requisition (Request) Date
+        MATKL TYPE EBAN-MATKL ,  "Material Group
+        EKGRP TYPE EBAN-EKGRP ,  "Purchasing Group
+        WERKS TYPE EBAN-WERKS ,  " Plant
+        LGORT TYPE EBAN-LGORT ,  " storage location
+        AFNAM TYPE EBAN-AFNAM ,  "Name of Requisitioner/Requester
+        DEPT_DESC TYPE CHAR80  ,
+        PREIS TYPE EBAN-PREIS ,  " Price in Purchase Requisition
+        MENGE TYPE EBAN-MENGE ,  "Purchase Requisition Quantity
+       MENGE1 TYPE GSWRT ,  "    Purchase Requisition value menge * preis
+        PEINH TYPE EBAN-PEINH ,  " Price Unit
+        MATNR TYPE ZPRTAG-MATNR , "Material Number
+        ERNAM TYPE ZPRTAG-ERNAM , "Name of Person who Created the Object
+        USNAM TYPE ZPRTAG-USNAM , " user name
+       USNAM1 TYPE ZPRTAG-USNAM , " for tagg user name
+       USNAM2 TYPE ZPRTAG-USNAM , " for untag user name
+       MAKTX TYPE ZPRTAG-MAKTX , " Material Description (Short Text)
+       REMARKS TYPE ZPRTAG-REMARKS , " REMARKS
+      LONGTXT TYPE CHAR40 ,        "user comments
+       UTAGD  TYPE DATUM ,         "UNTAG DATE
+        TAGD  TYPE DATUM ,        "TAG DATE
+       DETAG  TYPE DATUM ,
+       COUNT   TYPE I ,          "untag dats
+       COUNT1  TYPE I ,             " tagging count
+       COUNT2  TYPE I ,             " tagging days count
+       NAME_TEXTC(80) TYPE C ,     "user name
+       NAME_TEXTC1(80) TYPE C ,    "tagged by
+       NAME_TEXTC2(80) TYPE C ,    "untagged by
+       TAGMARK  TYPE STRING ,
+       UNMARK  TYPE STRING,
+       TABKEY LIKE CDPOS-TABKEY,
+ END OF TT_FINAL .
+
+DATA : BEGIN OF IT_ZPRTAG OCCURS 10.
+        INCLUDE STRUCTURE ZPRTAG.
+DATA : END OF IT_ZPRTAG.
+
+DATA: IT_FINAL TYPE STANDARD TABLE OF TT_FINAL ,
+      IT_FINAL1 TYPE STANDARD TABLE OF TT_FINAL ,
+      WA_FINAL TYPE TT_FINAL ,
+       WA_FINAL1 TYPE TT_FINAL .
+DATA: TCOUNT TYPE I .
+DATA: UCOUNT TYPE I .
+
+DATA : TDNAME TYPE TDOBNAME.
+DATA : WA_STXH TYPE STXH.
+DATA : ITEXT  TYPE TABLE OF TDLINE,
+       WA_TEXT TYPE TDLINE.
+DATA: G_REPID LIKE SY-CPROG.
+DATA: P_TEMP TYPE C.
+TYPES: BEGIN OF TY_CDPOS,
+     BNFPO(2) TYPE C .
+        INCLUDE STRUCTURE CDPOS.
+TYPES: END OF TY_CDPOS.
+
+DATA : BEGIN OF IT_CDHDR OCCURS 10,
+         CHANGENR   TYPE CDHDR-CHANGENR,
+         OBJECTID   TYPE CDHDR-OBJECTID,
+         OBJECTCLAS TYPE CDHDR-OBJECTCLAS,
+         TCODE      TYPE CDHDR-TCODE,
+         UDATE      TYPE UDATE,
+       END OF IT_CDHDR.
+
+
+DATA: IT_CDPOS TYPE STANDARD TABLE OF TY_CDPOS  .
+DATA: IT_CDPOS1 TYPE STANDARD TABLE OF TY_CDPOS  ,
+      WA_CDPOS TYPE TY_CDPOS .
+DATA: C_USER_COMMAND TYPE SLIS_FORMNAME VALUE 'USER_COMMAND'.
+
+SELECTION-SCREEN BEGIN OF BLOCK B1 WITH FRAME TITLE TEXT-001 .
+SELECT-OPTIONS : BANFN FOR EBAN-BANFN ,
+                 BNFPO FOR EBAN-BNFPO ,
+                 BADAT FOR EBAN-BADAT ,
+                 MATKL FOR EBAN-MATKL ,
+                 EKGRP FOR EBAN-EKGRP ,
+                 WERKS FOR EBAN-WERKS ,
+                 LGORT FOR EBAN-LGORT ,
+                 AFNAM FOR EBAN-AFNAM ,
+                 MATNR FOR ZPRTAG-MATNR ,
+                 BUDAT FOR ZPRTAG-BUDAT .
+PARAMETERS : R1 RADIOBUTTON GROUP G1,
+             R2 RADIOBUTTON GROUP G1,
+             R3 RADIOBUTTON GROUP G1 DEFAULT 'X'.
+SELECTION-SCREEN END OF BLOCK B1 .
+
+
+SELECTION-SCREEN BEGIN OF BLOCK BLK WITH FRAME TITLE TEXT-003.
+SELECTION-SCREEN SKIP.
+SELECTION-SCREEN PUSHBUTTON /25(60) TEXT USER-COMMAND NREL.
+SELECTION-SCREEN SKIP.
+SELECTION-SCREEN END OF BLOCK BLK.
+
+INITIALIZATION.
+  G_REPID = SY-REPID.
+  X_SAVE = 'A'.
+  MOVE 'Tagg / untagg Report' TO TEXT.
+  CLEAR P_TEMP.
+
+AT SELECTION-SCREEN.
+  IF SSCRFIELDS-UCOMM = 'NREL'.
+    SUBMIT ZMMR_PRTAG1 VIA SELECTION-SCREEN AND RETURN.
+    IF TEXT IS NOT INITIAL .
+      EXIT.
+    ENDIF .
+
+  ENDIF.
+
+START-OF-SELECTION.
+  IF R1 EQ 'X'.
+    SELECT
+         A~BANFN
+         A~BNFPO
+         A~BADAT
+         A~MATKL
+         A~EKGRP
+         A~WERKS
+         A~LGORT
+         A~AFNAM
+         A~PREIS
+         A~FRGDT
+         A~MENGE
+         A~PEINH
+         B~MATNR
+          B~TAGG
+         B~BUDAT
+         B~ERNAM
+         B~USNAM
+         B~MAKTX
+         B~REMARKS
+         B~LONGTXT INTO CORRESPONDING FIELDS OF TABLE IT_FINAL
+                  FROM EBAN AS A INNER JOIN  ZPRTAG AS B
+                     ON A~BANFN = B~BANFN AND
+                        A~BNFPO = B~BNFPO
+                  WHERE A~BANFN IN BANFN  AND
+                        A~BNFPO IN BNFPO  AND
+                        A~BADAT IN BADAT  AND
+                        A~MATKL IN MATKL  AND
+                        A~EKGRP IN EKGRP  AND
+                        A~WERKS IN WERKS  AND
+                        A~LGORT IN LGORT  AND
+                        A~AFNAM IN AFNAM  AND
+                        B~MATNR IN MATNR  AND
+                        B~BUDAT IN BUDAT  AND
+                        B~TAGG  =  R1.
+  ELSEIF R2 = 'X'.
+    R2 = ' '.
+    SELECT
+         A~BANFN
+         A~BNFPO
+         A~BADAT
+         A~MATKL
+         A~EKGRP
+         A~WERKS
+         A~LGORT
+         A~AFNAM
+         A~PREIS
+         A~FRGDT
+         A~MENGE
+         A~PEINH
+         B~MATNR
+          B~TAGG
+         B~BUDAT
+         B~ERNAM
+         B~USNAM
+         B~MAKTX
+         B~REMARKS
+         B~LONGTXT INTO CORRESPONDING FIELDS OF TABLE IT_FINAL
+                  FROM EBAN AS A INNER JOIN  ZPRTAG AS B
+                     ON A~BANFN = B~BANFN AND
+                        A~BNFPO = B~BNFPO
+                  WHERE A~BANFN IN BANFN  AND
+                        A~BNFPO IN BNFPO  AND
+                        A~BADAT IN BADAT  AND
+                        A~MATKL IN MATKL  AND
+                        A~EKGRP IN EKGRP  AND
+                        A~WERKS IN WERKS  AND
+                        A~LGORT IN LGORT  AND
+                        A~AFNAM IN AFNAM  AND
+                        B~MATNR IN MATNR  AND
+                        B~BUDAT IN BUDAT  AND
+                        B~TAGG  =  R2.
+    R2 = 'X'.
+  ELSEIF R3 = 'X'.
+    SELECT
+         A~BANFN
+         A~BNFPO
+         A~BADAT
+         A~MATKL
+         A~EKGRP
+         A~WERKS
+         A~LGORT
+         A~AFNAM
+         A~PREIS
+         A~FRGDT
+         A~MENGE
+         A~PEINH
+         B~MATNR
+          B~TAGG
+         B~BUDAT
+         B~ERNAM
+         B~USNAM
+         B~MAKTX
+         B~REMARKS
+         B~LONGTXT INTO CORRESPONDING FIELDS OF TABLE IT_FINAL
+                  FROM EBAN AS A INNER JOIN  ZPRTAG AS B
+                     ON A~BANFN = B~BANFN AND
+                        A~BNFPO = B~BNFPO
+                  WHERE A~BANFN IN BANFN  AND
+                        A~BNFPO IN BNFPO  AND
+                        A~BADAT IN BADAT  AND
+                        A~MATKL IN MATKL  AND
+                        A~EKGRP IN EKGRP  AND
+                        A~WERKS IN WERKS  AND
+                        A~LGORT IN LGORT  AND
+                        A~AFNAM IN AFNAM  AND
+                        B~MATNR IN MATNR  AND
+                        B~BUDAT IN BUDAT  .
+  ENDIF.
+
+
+  SORT   IT_FINAL BY BANFN BNFPO TAGG .
+
+  DELETE ADJACENT DUPLICATES FROM IT_FINAL COMPARING BANFN BNFPO .
+  IT_FINAL1[] = IT_FINAL[] .
+****_____for pr release date .
+*LOOP at it_final INTO wa_final.
+*  CONCATENATE  sy-mandt wa_final-banfn wa_final-bnfpo into wa_final-tabkey .
+*
+*     SELECT * APPENDING CORRESPONDING FIELDS OF TABLE IT_CDPOS
+*                                       FROM cdpos
+*                                       where objectclas = 'BANF'
+*                                         AND OBJECTID = WA_FINAL-BANFN
+*                                         and tabkey  =  wa_final-tabkey
+*                                         and tabname =  'EBAN'
+*                                         AND VALUE_NEW = 'F' .
+*APPEND  WA_CDPOS to it_CDPOS .
+*CLEAR WA_CDPOS  .
+*CLEAR WA_FINAL .
+* endloop.
+*DELETE it_cdpos where objectid = ' ' .
+*sort it_cdpos BY CHANGENR  DESCENDING .
+*DELETE ADJACENT DUPLICATES FROM  it_cdpos COMPARING  CHANGENR tabkey  .
+
+*************************************************************************
+
+
+
+*  DATA:BEGIN OF R_BANFN OCCURS 0,
+*       SIGN TYPE C,
+*       OPTION(2) TYPE C,
+*       LOW TYPE EBAN-BANFN,
+*       HIGH TYPE EBAN-BANFN,
+*  END OF R_BANFN.
+*  REFRESH R_BANFN.
+*  CLEAR   R_BANFN.
+*  IF IT_FINAL[] IS NOT INITIAL.
+*    LOOP AT IT_FINAL INTO WA_FINAL.
+*      R_BANFN-LOW = WA_FINAL-BANFN.
+*      R_BANFN-SIGN = 'I'.
+*      R_BANFN-OPTION = 'EQ'.
+*      APPEND R_BANFN.
+*      CLEAR R_BANFN.
+*    ENDLOOP.
+*    DELETE ADJACENT DUPLICATES FROM R_BANFN.
+*    CLEAR WA_FINAL.
+*  ENDIF.
+
+
+*  SELECT CHANGENR OBJECTID OBJECTCLAS TCODE
+*         FROM  CDHDR
+*         INTO  CORRESPONDING FIELDS OF TABLE IT_CDHDR
+*         WHERE OBJECTCLAS = 'BANF'
+*         AND   OBJECTID   IN R_BANFN
+*         AND   TCODE      = 'ME54N'
+*         OR    TCODE      = 'ME55' .
+
+*  SORT IT_CDHDR BY OBJECTID CHANGENR DESCENDING.
+*
+*LOOP AT .
+*
+*ENDLOOP.
+
+
+
+
+  IF IT_FINAL IS NOT INITIAL .
+
+    LOOP AT IT_FINAL INTO WA_FINAL  .
+**------------
+      if wa_final-maktx is INITIAL.
+        SELECT SINGLE maktx into wa_final-maktx from makt where matnr = wa_final-matnr.
+        endif.
+*-------------
+      WA_FINAL-MENGE1  =   WA_FINAL-MENGE  *   WA_FINAL-PREIS  .  " pr value rate * Qunatity
+****___ "tagged by username
+      SELECT SINGLE USNAM INTO WA_FINAL-USNAM1
+                         FROM ZPRTAG WHERE BANFN = WA_FINAL-BANFN
+                         AND  BNFPO = WA_FINAL-BNFPO  AND  TAGG =  'X ' .
+****__"untagged by
+      SELECT SINGLE USNAM INTO WA_FINAL-USNAM2
+                         FROM ZPRTAG  WHERE BANFN = WA_FINAL-BANFN
+                         AND  BNFPO = WA_FINAL-BNFPO AND  TAGG =  ' ' .
+****___FOR PR CREATER NAME
+
+      SELECT  SINGLE NAME_TEXTC INTO WA_FINAL-NAME_TEXTC
+                                 FROM USER_ADDR  WHERE BNAME = WA_FINAL-ERNAM .
+
+*    SELECT SINGLE OBJECTID CHANGENR INTO (WA_FINAL-BANFN1 , WA_FINAL-BANFN2)
+*                  FROM CDPOS  WHERE OBJECTID = WA_FINAL-BANFN  AND  VALUE_NEW = 'F'.
+
+      SELECT SINGLE DEPT_DESC INTO WA_FINAL-DEPT_DESC
+                              FROM ZMM_REL_STRATEGY
+                                WHERE ZDEPT = WA_FINAL-AFNAM .
+
+*      REFRESH IT_CDHDR.
+*      CLEAR   IT_CDHDR.
+*      SELECT CHANGENR OBJECTID OBJECTCLAS TCODE
+*             FROM  CDHDR
+*             INTO  CORRESPONDING FIELDS OF TABLE IT_CDHDR
+*             WHERE OBJECTCLAS = 'BANF'
+*             AND   OBJECTID   = WA_FINAL-BANFN
+*             AND   TCODE      = 'ME54N'
+*             OR    TCODE      = 'ME55' .
+*      IF SY-SUBRC = 0.
+*        SORT IT_CDHDR BY CHANGENR DESCENDING.
+*        READ TABLE IT_CDHDR INDEX 1.
+*        WA_FINAL-CHANGENR = IT_CDHDR-CHANGENR.
+*      ENDIF.
+**************************************************
+*      SELECT MAX( CHANGENR ) AS CHANGENR
+*             FROM  CDHDR
+*             INTO CORRESPONDING FIELDS OF  WA_FINAL
+*             WHERE OBJECTCLAS = 'BANF'
+*             AND   OBJECTID   = WA_FINAL-BANFN
+*             AND   TCODE      = 'ME54N'
+*             OR    TCODE      = 'ME55' .
+*   'ME51N' OR TCODE  = 'ME52N' OR TCODE  =
+***************************************************
+
+      SELECT MAX( BUDAT ) AS TBUDAT
+             FROM  ZPRTAG
+            INTO CORRESPONDING FIELDS OF  WA_FINAL
+                  WHERE BANFN = WA_FINAL-BANFN
+                  AND   BNFPO = WA_FINAL-BNFPO
+                  AND   TAGG  =  'X '
+                  AND   BUDAT IN BUDAT.
+
+      SELECT MAX( BUDAT ) AS UBUDAT
+             FROM  ZPRTAG
+            INTO CORRESPONDING FIELDS OF  WA_FINAL
+                  WHERE BANFN = WA_FINAL-BANFN
+                  AND   BNFPO = WA_FINAL-BNFPO
+                  AND   TAGG  = ' '
+                  AND   BUDAT IN BUDAT.
+      IF WA_FINAL-UBUDAT LT WA_FINAL-TBUDAT.
+        WA_FINAL-UBUDAT = ' '.
+      ENDIF.
+
+
+*      DATA  : BUDAT1 TYPE SY-DATUM.
+      CLEAR : IT_ZPRTAG[],IT_ZPRTAG,BUDAT1.
+      LOOP AT BUDAT.
+        IF BUDAT1 IS INITIAL.
+          BUDAT1 = BUDAT-LOW.
+        ELSEIF BUDAT1 LT BUDAT-LOW.
+          BUDAT1  =  BUDAT-LOW.
+        ENDIF.
+      ENDLOOP.
+
+      SELECT BANFN BNFPO BUDAT TAGG
+             FROM  ZPRTAG
+             INTO  CORRESPONDING FIELDS OF TABLE IT_ZPRTAG
+             WHERE BANFN = WA_FINAL-BANFN
+               AND BNFPO = WA_FINAL-BNFPO.
+      LOOP AT IT_ZPRTAG .
+        IF IT_ZPRTAG-TAGG  = 'X' AND
+           IT_ZPRTAG-BUDAT IN BUDAT.
+          WA_FINAL-TCOUNT = WA_FINAL-TCOUNT + 1.
+        ELSEIF IT_ZPRTAG-TAGG  = 'X' AND
+               IT_ZPRTAG-BUDAT LT BUDAT1.
+          WA_FINAL-TCOUNT = WA_FINAL-TCOUNT + 1.
+*          WA_FINAL-TCOUNT = WA_FINAL-TCOUNT + 1.
+        ELSEIF IT_ZPRTAG-TAGG  = ' ' AND
+               IT_ZPRTAG-BUDAT IN BUDAT.
+          WA_FINAL-UCOUNT = WA_FINAL-UCOUNT + 1.
+        ELSEIF IT_ZPRTAG-TAGG  = ' ' AND
+               IT_ZPRTAG-BUDAT LT BUDAT1.
+          WA_FINAL-UCOUNT = WA_FINAL-UCOUNT + 1.
+        ENDIF.
+      ENDLOOP.
+      IF WA_FINAL-UCOUNT LT WA_FINAL-TCOUNT.
+        WA_FINAL-UBUDAT = ' '.
+      ENDIF.
+*******************************************************
+*      SELECT COUNT(*) AS TCOUNT
+*             FROM ZPRTAG
+*             INTO CORRESPONDING FIELDS OF  WA_FINAL
+*                WHERE BANFN = WA_FINAL-BANFN
+*                 AND  BNFPO = WA_FINAL-BNFPO
+*                 AND    TAGG = 'X' .
+*
+*      SELECT COUNT(*) AS UCOUNT
+*             FROM ZPRTAG
+*             INTO CORRESPONDING FIELDS OF  WA_FINAL
+*                WHERE BANFN = WA_FINAL-BANFN
+*                 AND  BNFPO = WA_FINAL-BNFPO
+*                 AND    TAGG = ' ' .
+*******************************************************
+      MODIFY IT_FINAL FROM WA_FINAL .
+      CLEAR  WA_FINAL .
+    ENDLOOP.
+************************************************************************
+
+
+    LOOP AT IT_FINAL INTO WA_FINAL .
+***___for pr release date
+*      SELECT SINGLE UDATE INTO WA_FINAL-UDATE  FROM CDHDR
+*                          WHERE CHANGENR = WA_FINAL-CHANGENR .
+***___for pr release date from ermv .
+
+      SELECT SINGLE FGDAT INTO WA_FINAL-FGDAT FROM EREV
+                          WHERE EDOKN = WA_FINAL-BANFN
+                           AND  EDOKP = WA_FINAL-BNFPO .
+
+      REFRESH IT_CDHDR.
+      CLEAR   IT_CDHDR.
+      SELECT CHANGENR OBJECTID OBJECTCLAS TCODE UDATE
+             FROM  CDHDR
+             INTO  CORRESPONDING FIELDS OF TABLE IT_CDHDR
+             WHERE OBJECTCLAS = 'BANF'
+             AND   OBJECTID   = WA_FINAL-BANFN
+             AND   ( TCODE    = 'ME54N'
+             OR    TCODE      = 'ME55'  ).
+      IF SY-SUBRC = 0.
+        SORT IT_CDHDR BY CHANGENR DESCENDING.
+        READ TABLE IT_CDHDR INDEX 1.
+        WA_FINAL-CHANGENR = IT_CDHDR-CHANGENR.
+        WA_FINAL-UDATE1   = IT_CDHDR-UDATE.
+      ENDIF.
+
+*      SELECT SINGLE MAX( UDATE ) INTO WA_FINAL-UDATE1  FROM CDHDR
+*                          WHERE OBJECTID   = WA_FINAL-BANFN
+*                            AND OBJECTCLAS = 'BANF'
+*                            AND TCODE      = 'ME54N'.
+
+*      IF WA_FINAL-UDATE GT WA_FINAL-FGDAT  .
+*        WA_FINAL-UDATE1 = WA_FINAL-UDATE .
+*      ENDIF .
+*
+*      IF WA_FINAL-FGDAT GT WA_FINAL-UDATE .
+*        WA_FINAL-UDATE1 = WA_FINAL-FGDAT .
+*      ENDIF.
+*      IF WA_FINAL-FGDAT = WA_FINAL-UDATE .
+*        WA_FINAL-UDATE1 = WA_FINAL-UDATE .
+*      ENDIF.
+*      WA_FINAL-UDATE1 = WA_FINAL-UDATE.
+*****__for tagged by user name
+
+      SELECT  SINGLE NAME_TEXTC INTO WA_FINAL-NAME_TEXTC1 FROM USER_ADDR
+                              WHERE BNAME = WA_FINAL-USNAM1 .
+****__for untagged by user name
+
+      SELECT  SINGLE NAME_TEXTC INTO WA_FINAL-NAME_TEXTC2 FROM USER_ADDR
+                               WHERE BNAME = WA_FINAL-USNAM2 .
+
+***__ for count untag days ***********
+      IF WA_FINAL-TBUDAT IS NOT INITIAL AND
+         ( WA_FINAL-UBUDAT NE ' ' AND
+           WA_FINAL-UBUDAT IS NOT INITIAL ).
+
+        CALL FUNCTION 'HR_SGPBS_YRS_MTHS_DAYS'
+          EXPORTING
+            BEG_DA     = WA_FINAL-TBUDAT
+            END_DA     = WA_FINAL-UBUDAT
+          IMPORTING
+            NO_CAL_DAY = WA_FINAL-COUNT.
+*        ENDIF .
+      ENDIF .
+
+
+      MODIFY IT_FINAL FROM WA_FINAL .
+      CLEAR WA_FINAL. .
+    ENDLOOP .
+
+
+*********************_ for count tagg days after pr release
+    LOOP AT IT_FINAL INTO WA_FINAL.
+      IF WA_FINAL-UDATE1 IS NOT INITIAL .
+        IF WA_FINAL-TBUDAT IS NOT INITIAL .
+          CALL FUNCTION 'HR_SGPBS_YRS_MTHS_DAYS'
+            EXPORTING
+              BEG_DA     = WA_FINAL-UDATE1
+              END_DA     = WA_FINAL-TBUDAT
+            IMPORTING
+              NO_CAL_DAY = WA_FINAL-COUNT2.
+        ENDIF.
+      ENDIF .
+
+      MODIFY IT_FINAL FROM WA_FINAL .
+      CLEAR WA_FINAL. .
+    ENDLOOP.
+  ENDIF .
+
+  IF IT_FINAL IS NOT INITIAL .
+    LOOP AT IT_FINAL INTO WA_FINAL .
+
+      SELECT SINGLE  BANFN BNFPO
+                  INTO (WA_FINAL-BANFN3 , WA_FINAL-BNFPO3)
+                          FROM  ZPRTAG
+                          WHERE BANFN = WA_FINAL-BANFN
+                            AND BNFPO = WA_FINAL-BNFPO .
+*                       and  tagg = 'x' .
+
+
+
+      CONCATENATE WA_FINAL-BANFN3 WA_FINAL-BNFPO3 'X' INTO ITEMTEXT2.
+      SELECT SINGLE * FROM STXH INTO WA_STXH
+                   WHERE TDOBJECT = 'ZPRTAG'
+                     AND TDNAME   = ITEMTEXT2
+                     AND TDID     = 'PRT'
+                     AND TDSPRAS  = SY-LANGU   .
+
+      IF SY-SUBRC = 0 .
+        CALL FUNCTION 'READ_TEXT'
+          EXPORTING
+           CLIENT                        =  SY-MANDT
+            ID                            = 'PRT'
+            LANGUAGE                      = SY-LANGU
+            NAME                          = ITEMTEXT2
+            OBJECT                        = 'ZPRTAG'
+*           ARCHIVE_HANDLE                = 0
+*           LOCAL_CAT                     = ' '
+*         IMPORTING
+*           HEADER                        =
+          TABLES
+            LINES                         = ITEXTR
+         EXCEPTIONS
+           ID                            = 1
+           LANGUAGE                      = 2
+           NAME                          = 3
+           NOT_FOUND                     = 4
+           OBJECT                        = 5
+           REFERENCE_CHECK               = 6
+           WRONG_ACCESS_TO_ARCHIVE       = 7
+           OTHERS                        = 8  .
+        CONCATENATE LINES OF ITEXTR INTO WA_FINAL-TAGMARK .
+        IF SY-SUBRC <> 0.
+          MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+                  WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+
+        ENDIF.
+
+        IF SY-SUBRC = 0 .
+          SELECT SINGLE BANFN BNFPO
+                 INTO (WA_FINAL-BANFN4 , WA_FINAL-BNFPO4)
+                 FROM  ZPRTAG
+                  WHERE BANFN = WA_FINAL-BANFN
+                   AND  BNFPO = WA_FINAL-BNFPO .
+*           and  tagg = ' ' .
+
+          CONCATENATE WA_FINAL-BANFN4 WA_FINAL-BNFPO4  INTO ITEMTEXT2.
+          SELECT SINGLE * FROM STXH INTO WA_STXH
+                       WHERE TDOBJECT = 'ZPRTAG'
+                         AND TDNAME   = ITEMTEXT2
+                         AND TDID     = 'PRT'
+                         AND TDSPRAS  = SY-LANGU   .
+
+          IF SY-SUBRC = 0 .
+            CALL FUNCTION 'READ_TEXT'
+                   EXPORTING
+                    CLIENT                        = SY-MANDT
+                     ID                            = 'PRT'
+                     LANGUAGE                      = SY-LANGU
+                     NAME                          =  ITEMTEXT2
+                     OBJECT                        =  'ZPRTAG'
+*        ARCHIVE_HANDLE                = 0
+*        LOCAL_CAT                     = ' '
+*      IMPORTING
+*        HEADER                        =
+                   TABLES
+                     LINES                         =  ITEXTR1
+                 EXCEPTIONS
+                    ID                            = 1
+                    LANGUAGE                      = 2
+                    NAME                          = 3
+                    NOT_FOUND                     = 4
+                    OBJECT                        = 5
+                    REFERENCE_CHECK               = 6
+                    WRONG_ACCESS_TO_ARCHIVE       = 7
+                    OTHERS                        = 8.
+            CONCATENATE LINES OF ITEXTR1 INTO WA_FINAL-UNMARK .
+            IF SY-SUBRC <> 0.
+              MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+                      WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+            ENDIF.
+          ENDIF.
+        ENDIF.
+      ENDIF .
+      MODIFY IT_FINAL FROM WA_FINAL .
+      CLEAR  WA_FINAL .
+    ENDLOOP.
+
+  ENDIF.
+
+
+END-OF-SELECTION.
+  LAYOUT1-ZEBRA = 'X'.
+  LAYOUT1-COLWIDTH_OPTIMIZE = 'X'.
+
+  CLEAR: FIELDCATALOG, FIELDCATALOG[].
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'BANFN'.
+  FIELDCATALOG-SELTEXT_M = 'PR No.'.
+  FIELDCATALOG-TABNAME   = 'IT_FINAL'.
+*  FIELDCATALOG-HOTSPOT   = 'X'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'ERNAM'.
+  FIELDCATALOG-SELTEXT_M = 'PR Creater'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'NAME_TEXTC'.
+  FIELDCATALOG-SELTEXT_M = 'PR Creater Name '.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'BNFPO'.
+  FIELDCATALOG-SELTEXT_M = 'Item No.'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'MAKTX'.
+  FIELDCATALOG-SELTEXT_M = 'Material Description'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'BADAT'.
+  FIELDCATALOG-SELTEXT_M = 'PR.CR.DT'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'UDATE1'.
+  FIELDCATALOG-SELTEXT_M = 'PR.RL.DT'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+
+
+  FIELDCATALOG-FIELDNAME = 'MENGE1'.
+  FIELDCATALOG-SELTEXT_M = 'PR Value'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+*  FIELDCATALOG-FIELDNAME = 'REMARKS'.
+*  FIELDCATALOG-SELTEXT_M = 'Tag Reason'.
+*  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+*  APPEND FIELDCATALOG .
+*  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'AFNAM'.
+  FIELDCATALOG-SELTEXT_M = 'Requitioner'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL '.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'DEPT_DESC'.
+  FIELDCATALOG-SELTEXT_M = 'Name of Department'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL '.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+
+  FIELDCATALOG-FIELDNAME = 'USNAM1'.
+  FIELDCATALOG-SELTEXT_M = 'Tagged Login id'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'NAME_TEXTC1'.
+  FIELDCATALOG-SELTEXT_M = 'Tagged By'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'TBUDAT'.
+  FIELDCATALOG-SELTEXT_M = 'Tagged date'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'COUNT2'.
+  FIELDCATALOG-SELTEXT_M = 'PR RL - TAG'."Tagging Days'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+*FIELDCATALOG-FIELDNAME = 'REJTEXT'.
+*FIELDCATALOG-SELTEXT_M = 'Tag Reason'.
+*FIELDCATALOG-TABNAME = 'IT_FINAL'.
+*APPEND FIELDCATALOG .
+*CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'TCOUNT'.
+  FIELDCATALOG-SELTEXT_M = 'Tag Count'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'USNAM2'.
+  FIELDCATALOG-SELTEXT_M = 'Untagg Login id '.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'NAME_TEXTC2'.
+  FIELDCATALOG-SELTEXT_M = 'Untagg By '.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'UBUDAT'.
+  FIELDCATALOG-SELTEXT_M = 'UnTagg Date'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'COUNT'.
+  FIELDCATALOG-SELTEXT_M = 'TAG - UNTAG'."Untag Days'.
+  FIELDCATALOG-TABNAME   = 'IT_FINAL'.
+  FIELDCATALOG-NO_ZERO   = 'X'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'UCOUNT'.
+  FIELDCATALOG-SELTEXT_M = 'Untag Count'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME = 'UNMARK'.
+  FIELDCATALOG-SELTEXT_M = 'Untag Reason'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  FIELDCATALOG-FIELDNAME =   'TAGMARK'.
+  FIELDCATALOG-SELTEXT_M = 'Tag Reason'.
+  FIELDCATALOG-TABNAME = 'IT_FINAL'.
+  APPEND FIELDCATALOG .
+  CLEAR FIELDCATALOG.
+
+  CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+             EXPORTING
+*                  I_INTERFACE_CHECK                 = ' '
+*                  I_BYPASSING_BUFFER                = ' '
+*                  I_BUFFER_ACTIVE                   = ' '
+                  I_CALLBACK_PROGRAM                = G_REPID
+*                  I_CALLBACK_PF_STATUS_SET          = ' '
+                  I_CALLBACK_USER_COMMAND           = 'USER_COMMAND' "C_USER_COMMAND
+*                  I_CALLBACK_TOP_OF_PAGE            = ' '
+*                  I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*                  I_CALLBACK_HTML_END_OF_LIST       = ' '
+*                  I_STRUCTURE_NAME                  =
+*                  I_BACKGROUND_ID                   = ' '
+*                  I_GRID_TITLE                      =
+*                  I_GRID_SETTINGS                   =
+                IS_LAYOUT                         = LAYOUT1
+               IT_FIELDCAT                       =  FIELDCATALOG[]
+*                  IT_EXCLUDING                      =
+*                  IT_SPECIAL_GROUPS                 =
+*                  IT_SORT                           =
+*                  IT_FILTER                         =
+*                  IS_SEL_HIDE                       =
+               I_DEFAULT                         =  'X'
+*                  I_SAVE                            = ' '
+*                  IS_VARIANT                        =
+*                  IT_EVENTS                         =
+*                  IT_EVENT_EXIT                     =
+*                  IS_PRINT                          =
+*                  IS_REPREP_ID                      =
+*                  I_SCREEN_START_COLUMN             = 0
+*                  I_SCREEN_START_LINE               = 0
+*                  I_SCREEN_END_COLUMN               = 0
+*                  I_SCREEN_END_LINE                 = 0
+*                  I_HTML_HEIGHT_TOP                 = 0
+*                  I_HTML_HEIGHT_END                 = 0
+*                  IT_ALV_GRAPHICS                   =
+*                  IT_HYPERLINK                      =
+*                  IT_ADD_FIELDCAT                   =
+*                  IT_EXCEPT_QINFO                   =
+*                  IR_SALV_FULLSCREEN_ADAPTER        =
+*                IMPORTING
+*                  E_EXIT_CAUSED_BY_CALLER           =
+*                  ES_EXIT_CAUSED_BY_USER            =
+              TABLES
+                T_OUTTAB                          =   IT_FINAL.
+*                EXCEPTIONS
+*                  PROGRAM_ERROR                     = 1
+*                  OTHERS                            = 2
+  .
+  IF SY-SUBRC <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+
+
+*AT LINE-SELECTION.
+**    IF .
+*
+**  READ TABLE IT_FINAL INTO WA_FINAL INDEX I_SELFIELD-TABINDEX.
+**  IF SY-SUBRC = 0.
+*  SET PARAMETER ID 'BAN' FIELD WA_FINAL-BANFN."I_SELFIELD-VALUE.
+*  CALL TRANSACTION 'ME53N' AND SKIP FIRST SCREEN.
+*  ENDIF.
+
+
+
+**&---------------------------------------------------------------------*
+**&      Form  USER_COMMAND
+**&---------------------------------------------------------------------*
+**       text
+**----------------------------------------------------------------------*
+**      -->F_UCOMM    text
+**      -->I_SELFIELD text
+**----------------------------------------------------------------------*
+FORM USER_COMMAND USING F_UCOMM LIKE SY-UCOMM
+                        I_SELFIELD TYPE SLIS_SELFIELD. .
+*  At LINE-SELECTION.
+*    IF .
+  CASE I_SELFIELD-FIELDNAME.
+    WHEN 'BANFN'.
+*      IF I_SELFIELD-FIELDNAME = 'IT_FINAL-BANFN'.
+      SET PARAMETER ID 'BAN' FIELD I_SELFIELD-VALUE."I_SELFIELD-VALUE.
+      CALL TRANSACTION 'ME53N' AND SKIP FIRST SCREEN.
+*      ENDIF.
+  ENDCASE.
+ENDFORM.                    "USER_COMMAND
